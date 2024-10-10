@@ -6,3 +6,5 @@
 
 from tkinter import *
 
+def ui():
+  pass
