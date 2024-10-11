@@ -20,6 +20,9 @@ def convert_date(date_str):
     return datetime.strptime(date_str, '%Y-%m-%d')
 
 def center(window):
+    """
+    Permet de centrer la fenetre au milieu de l'ecran ou elle s'ouvre
+    """
     window.update_idletasks()
     width = window.winfo_width()
     frm_width = window.winfo_rootx() - window.winfo_x()
@@ -33,9 +36,14 @@ def center(window):
     window.deiconify()
 
 def search_transactions(positive_var, negative_var, transaction_period_var, person_name_var, transaction_listbox):
+    """
+    Permet de rechercher dans la database mongoDB
+    """
+
     search_criteria = {}
 
     # Vérifiez les cases à cocher
+    # Critère sur le type de versement
     if positive_var.get() == 1 and negative_var.get() == 1:
         search_criteria["montant"] = {"$exists": True}
     elif positive_var.get() == 1:
@@ -67,11 +75,10 @@ def search_transactions(positive_var, negative_var, transaction_period_var, pers
     # Recherche dans la base de données
     transactions = collection.find(search_criteria)
 
-    # Nettoyage et affichage des résultats
+    # Nettoyage de la listbox et affichage des résultats
     transaction_listbox.delete(0, END)
 
     for transaction in transactions:
-        # Convertir la date de chaîne en datetime
         transaction_date = convert_date(transaction["date"])
         formatted_date = transaction_date.strftime('%Y-%m-%d')
         listbox_entry = f"Montant: {transaction['montant']:>8} | Raison: {transaction['raison']:<20} | Date: {formatted_date} | Personne: {transaction.get('personne', 'Inconnue')}"
@@ -87,6 +94,15 @@ win.iconphoto(False, PhotoImage(file='source/icon-3.png'))
 win['bg'] = '#464646'
 
 lstbox_Font = Font(win, size=16)
+
+menubar = Menu(win)
+filemenu = Menu(menubar, tearoff=0)
+filemenu.add_command(label="Quit", command=win.quit)
+bitemenu = Menu(menubar, tearoff=0)
+bitemenu.add_command(label="Compte-rendu", command=win.quit)
+menubar.add_cascade(label='File', menu=filemenu)
+menubar.add_cascade(label='Bite', menu=bitemenu)
+win.config(menu=menubar)
 
 # Connection à MongoDB
 try:
@@ -106,8 +122,8 @@ frame_left.grid_columnconfigure(0, weight=0)
 frame_left.grid_columnconfigure(1, weight=0)
 frame_left.grid_columnconfigure(2, weight=1)
 
-frame_right = ttk.Frame(win, width=1071, height=860, relief="flat")
-frame_right.grid(row=0, column=1, sticky="nsew")
+frame_right = ttk.Frame(win, width=960, height=860, relief="flat")
+frame_right.grid(row=0, column=1, sticky="nsew", padx=50)
 frame_right.grid_propagate(False)
 
 positive_var = IntVar(value=1)  
@@ -125,7 +141,6 @@ negative_checkbutton = ttk.Checkbutton(frame_left, text="Débit", variable=negat
 positive_checkbutton.grid(row=0, column=1, sticky="nsew")
 negative_checkbutton.grid(row=0, column=1, sticky="nsew", padx=100)
 
-# Affichage de l'état du compte
 total_amount = sum(transaction['montant'] for transaction in collection.find())
 
 account_status_frame = ttk.Frame(frame_right)
@@ -140,10 +155,23 @@ total_label.grid(row=1, column=0, pady=10, sticky="w")
 account_status_frame['borderwidth'] = 2
 account_status_frame['relief'] = 'flat'
 
-transaction_listbox = Listbox(frame_right, font=lstbox_Font, height=800, width=200, bg='#464646', bd=0, fg="#AFAFAF", highlightbackground="#2F2F2F", relief="flat")
-transaction_listbox.grid(row=2, column=0, sticky="se", columnspan=3, rowspan=3)
+translist = ttk.Frame(frame_right)
+translist.grid(row=2, column=0, sticky="nsew", columnspan=1)
 
-# Combobox pour la période de transactions
+transaction_listbox = Listbox(translist, font=lstbox_Font, height=33, width=100, bg='#464646', bd=0, fg="#AFAFAF", highlightbackground="#2F2F2F", relief="flat")
+transaction_listbox.grid(row=0, column=0, sticky="nsew")
+
+scrollbar = ttk.Scrollbar(translist, orient='vertical', command=transaction_listbox.yview)
+scrollbar.grid(row=0, column=1, sticky="ns")
+
+transaction_listbox.config(yscrollcommand=scrollbar.set)
+
+translist.grid_columnconfigure(0, weight=1)
+translist.grid_rowconfigure(0, weight=1)
+
+translist['width'] = 500
+translist['height'] = 800
+
 period_label = ttk.Label(frame_left, text='Période de transactions :')
 transaction_period_var = StringVar()
 period_combobox = ttk.Combobox(frame_left, textvariable=transaction_period_var)
@@ -152,29 +180,16 @@ period_combobox.current(0)
 period_label.grid(row=2, column=0, sticky="w", padx=10, pady=10)
 period_combobox.grid(row=2, column=1, sticky="w", padx=10, pady=10)
 
-# Champ pour le nom de la personne
 person_label = ttk.Label(frame_left, text='Nom de la personne :')
 person_label.grid(row=3, column=0, sticky="w", padx=10, pady=10)
 
 person_name_var = StringVar()
-person_entry = ttk.Entry(frame_left, textvariable=person_name_var, width=30, font=lstbox_Font)
-person_entry.grid(row=3, column=1, sticky="w", padx=10, pady=10)
+person_entry = ttk.Entry(frame_left, textvariable=person_name_var, width=17, font=lstbox_Font)
+person_entry.grid(row=3, column=1, sticky="w", padx=5, pady=10)
 
-# Bouton de recherche
 search_button = ttk.Button(frame_left, text="Rechercher", command=lambda: search_transactions(positive_var, negative_var, transaction_period_var, person_name_var, transaction_listbox))
-search_button.grid(row=5, column=0, sticky="nsew", columnspan=3)
+search_button.grid(row=5, column=1, sticky="w", columnspan=1)
 
-# Affichage initial des transactions
-transaction_listbox.delete(0, END)
-for transaction in collection.find():
-        # Assurez-vous que la date est un objet datetime
-        if isinstance(transaction["date"], str):
-            transaction_date = datetime.strptime(transaction["date"], '%Y-%m-%d')
-        else:
-            transaction_date = transaction["date"]  # Doit être un datetime
-
-        formatted_date = transaction_date.strftime('%Y-%m-%d')
-        listbox_entry = f"Montant: {transaction['montant']:>8} | Raison: {transaction['raison']:<20} | Date: {formatted_date} | Personne: {transaction.get('personne', 'Inconnue')}"
-        transaction_listbox.insert(END, listbox_entry)
+search_transactions(positive_var, negative_var, transaction_period_var, person_name_var, transaction_listbox)
 
 win.mainloop()
