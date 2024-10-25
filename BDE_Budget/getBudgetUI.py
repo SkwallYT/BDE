@@ -12,6 +12,7 @@ from ttkthemes import ThemedTk
 from datetime import datetime, timedelta
 from pymongo import MongoClient
 from tkinter.font import Font
+import PDF_Writer
 
 def convert_date(date_str):
     """
@@ -84,6 +85,109 @@ def search_transactions(positive_var, negative_var, transaction_period_var, pers
         listbox_entry = f"Montant: {transaction['montant']:>8} | Raison: {transaction['raison']:<20} | Date: {formatted_date} | Personne: {transaction.get('personne', 'Inconnue')}"
         transaction_listbox.insert(END, listbox_entry)
 
+
+def make_pdf(positive_var, negative_var, transaction_period_var, person_name_var, cr):
+    search_criteria = {}
+
+    # Vérifiez les cases à cocher
+    # Critère sur le type de versement
+    if positive_var.get() == 1 and negative_var.get() == 1:
+        search_criteria["montant"] = {"$exists": True}
+    elif positive_var.get() == 1:
+        search_criteria["montant"] = {"$gte": 0}
+    elif negative_var.get() == 1:
+        search_criteria["montant"] = {"$lt": 0}
+
+    # Critère sur la période
+    period = transaction_period_var.get()
+    end_date = datetime.now()
+
+    # Applique une période si sélectionnée
+    if period != "Tout temps":
+        if period == "1 mois":
+            start_date = end_date - timedelta(days=30)
+        elif period == "3 mois":
+            start_date = end_date - timedelta(days=90)
+        elif period == "6 mois":
+            start_date = end_date - timedelta(days=180)
+        elif period == "12 mois":
+            start_date = end_date - timedelta(days=365)
+
+        search_criteria["date"] = {"$gte": start_date, "$lte": end_date}
+
+    # Critère sur le nom de la personne
+    person_name = person_name_var.get().strip()
+    if person_name:
+        search_criteria["personne"] = person_name
+
+    # Recherche dans la base de données
+    transactions_cursor = collection.find(search_criteria)
+
+    # Convertir le curseur en liste pour pouvoir compter les éléments
+    transactions = list(transactions_cursor)
+
+    # Vérifiez s'il y a des résultats
+    if len(transactions) == 0:
+        print("Aucune transaction trouvée pour ces critères.")
+        return
+
+    # Affichage des transactions
+    for transaction in transactions:
+        transaction_date = convert_date(transaction["date"])
+        formatted_date = transaction_date.strftime('%Y-%m-%d')
+        print(f"Montant: {transaction['montant']:>8} | Raison: {transaction['raison']:<20} | Date: {formatted_date} | Personne: {transaction.get('personne', 'Inconnue')}")
+
+
+def cr_window(clicked=False):
+    """
+    Permet de creer la fenetre de compte rendu
+
+    :return: bool : True si reussite, False sinon
+    """
+    if not clicked:
+        CR = ThemedTk(theme='equilux')
+        CR.title('Gestion des Transactions')
+        CR.minsize(400, 200)
+        CR.maxsize(400, 200)
+        CR.resizable(0, 0)
+        center(CR)
+        CR['bg'] = '#464646'
+        lstbox_Font = Font(CR, size=16)
+
+        type_label = ttk.Label(CR, text='Type de transactions :')
+        type_label.grid(row=0, column=0, sticky='w', padx=10, pady=10)
+
+        positive_var = IntVar(value=1)
+        negative_var = IntVar(value=1)
+
+        positive_checkbutton = ttk.Checkbutton(CR, text="Versements", variable=positive_var)
+        negative_checkbutton = ttk.Checkbutton(CR, text="Débit", variable=negative_var)
+
+        positive_checkbutton.grid(row=0, column=1, sticky="nsew")
+        negative_checkbutton.grid(row=0, column=1, sticky="nsew", padx=100)
+
+        period_label = ttk.Label(CR, text='Période de transactions :')
+        transaction_period_var = StringVar()
+        period_combobox = ttk.Combobox(CR, textvariable=transaction_period_var)
+        period_combobox['values'] = ("Tout temps", "1 mois", "3 mois", "6 mois", "12 mois")
+        period_combobox.current(0)
+        period_label.grid(row=2, column=0, sticky="w", padx=10, pady=10)
+        period_combobox.grid(row=2, column=1, sticky="w", padx=10, pady=10)
+
+        person_label = ttk.Label(CR, text='Nom de la personne :')
+        person_label.grid(row=3, column=0, sticky="w", padx=10, pady=10)
+
+        person_name_var = StringVar()
+        person_entry = ttk.Entry(CR, textvariable=person_name_var, width=17, font=lstbox_Font)
+        person_entry.grid(row=3, column=1, sticky="w", padx=5, pady=10)
+
+        search_button = ttk.Button(CR, text="Compte-Rendu", command=lambda: make_pdf(positive_var, negative_var, transaction_period_var, person_name_var, CR))
+        search_button.grid(row=5, column=1, sticky="w", columnspan=1)
+
+        CR.mainloop()
+
+        return True
+
 win = ThemedTk(theme='equilux')
 win.title('Gestion des Transactions')
 win.minsize(1530, 860)
@@ -92,14 +196,13 @@ win.resizable(0, 0)
 center(win)
 win.iconphoto(False, PhotoImage(file='source/icon-3.png'))
 win['bg'] = '#464646'
-
 lstbox_Font = Font(win, size=16)
 
 menubar = Menu(win)
 filemenu = Menu(menubar, tearoff=0)
 filemenu.add_command(label="Quit", command=win.quit)
 bitemenu = Menu(menubar, tearoff=0)
-bitemenu.add_command(label="Compte-rendu", command=win.quit)
+bitemenu.add_command(label="Compte-rendu", command= lambda: cr_window())
 menubar.add_cascade(label='File', menu=filemenu)
 menubar.add_cascade(label='Bite', menu=bitemenu)
 win.config(menu=menubar)
@@ -193,3 +296,4 @@ search_button.grid(row=5, column=1, sticky="w", columnspan=1)
 search_transactions(positive_var, negative_var, transaction_period_var, person_name_var, transaction_listbox)
 
 win.mainloop()
+
